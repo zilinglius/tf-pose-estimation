@@ -51,6 +51,7 @@ if __name__ == '__main__':
     logger.info('inference image: %s in %.4f seconds.' % (args.image, elapsed))
 
     image = TfPoseEstimator.draw_humans(image, humans, imgcopy=False)
+    cv2.imwrite('output.png', image)
 
     try:
         import matplotlib.pyplot as plt
