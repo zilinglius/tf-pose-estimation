@@ -1,6 +1,6 @@
 import logging
 import math
-
+import os
 import slidingwindow as sw
 
 import cv2
@@ -308,26 +308,29 @@ class TfPoseEstimator:
 
         # load graph
         logger.info('loading graph from %s(default size=%dx%d)' % (graph_path, target_size[0], target_size[1]))
-        with tf.gfile.GFile(graph_path, 'rb') as f:
-            graph_def = tf.GraphDef()
-            graph_def.ParseFromString(f.read())
+        graph_def = tf.GraphDef()
+
 
         if trt_bool is True:
-            output_nodes = ["Openpose/concat_stage7"]
-            graph_def = trt.create_inference_graph(
-                graph_def,
-                output_nodes,
-                max_batch_size=1,
-                max_workspace_size_bytes=1 << 20,
-                precision_mode="FP16",
-                # precision_mode="INT8",
-                minimum_segment_size=3,
-                is_dynamic_op=True,
-                maximum_cached_engines=int(1e3)
-            )
+            rt_graph_path = os.path.splitext(graph_path)[0] #import os first
+            rt_graph_path = rt_graph_path + "_rt.pb"
+            with tf.gfile.GFile(rt_graph_path, 'rb') as f:
+                graph_def.ParseFromString(f.read())
+
+        else:
+            with tf.gfile.GFile(graph_path, 'rb') as f:
+                graph_def.ParseFromString(f.read())
 
         self.graph = tf.get_default_graph()
         tf.import_graph_def(graph_def, name='TfPoseEstimator')
+        if tf_config is None:
+            if(trt_bool is True):
+                tf_config = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.50))
+            else:    
+                tf_config = tf.ConfigProto()
+            tf_config.gpu_options.allow_growth = True
+            #sess = tf.Session(config=tf_config)
+
         self.persistent_sess = tf.Session(graph=self.graph, config=tf_config)
 
         for ts in [n.name for n in tf.get_default_graph().as_graph_def().node]:
@@ -368,6 +371,7 @@ class TfPoseEstimator:
                 self.upsample_size: [target_size[1], target_size[0]]
             }
         )
+        """
         self.persistent_sess.run(
             [self.tensor_peaks, self.tensor_heatMat_up, self.tensor_pafMat_up],
             feed_dict={
@@ -382,6 +386,8 @@ class TfPoseEstimator:
                 self.upsample_size: [target_size[1] // 4, target_size[0] // 4]
             }
         )
+        """
+
 
         # logs
         if self.tensor_image.dtype == tf.quint8:
